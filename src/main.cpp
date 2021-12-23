@@ -9,7 +9,7 @@
 
 #define SPLIT_TAB(x) split(x,'\t')
 
-// #define TEST_MODE
+#define TEST_MODE
 
 //***************** Begin operation parameters *********************************
 #ifdef TEST_MODE
@@ -54,8 +54,8 @@ ulong _pumpOffPeriode24H = PUMP_OFF_PERIODE_24H;
 
 //***************** End operation parameters *********************************
 
-#define ON false
-#define OFF true
+#define ON true
+#define OFF false
 
 using namespace std;
 // Name of this Module for logging and MQTT
@@ -126,7 +126,7 @@ void setTemperatureHandler(const String &message){
 #endif
 
 EspMQTTClient mqttClient(
-  "PothornFunk", // WLAN SID
+  "PothornFunkOben", // WLAN SID
   "Sguea@rbr", // WLAN PW
   "192.168.2.20",   // MQTT Broker server ip on OpenHab PI
   "",             // Can be omitted if not needed
@@ -230,7 +230,7 @@ void WritePumpSwitchStatus2Database(bool status){
 }
 //***************** End InfluxDB *********************************
 
-boolean relaisStat;   // Actual state of the relay. 0 := On ; 1 := Off
+boolean relaisStat;   // Actual state of the relay. 1 := On ; 0 := Off
 
 void setup() {
   // LED PINs as output
@@ -319,8 +319,8 @@ void loop() {
 
         digitalWrite(relaisPin, relaisStat);
 
-        PublishRelaisStatus(!relaisStat);
-        WritePumpSwitchStatus2Database(!relaisStat);
+        PublishRelaisStatus(relaisStat);
+        WritePumpSwitchStatus2Database(relaisStat);
       }
 
 #ifdef TEST_MODE
@@ -330,7 +330,11 @@ void loop() {
     }
   }
   else{
-    Serial.println("Not connected...");
+    if(mqttClient.isWifiConnected() == false){
+      Serial.println("Wifi not connected...");
+    }else if(mqttClient.isMqttConnected() == false){
+      Serial.println("MQTT not connected...");
+    }
   }
 
   mqttClient.loop();
