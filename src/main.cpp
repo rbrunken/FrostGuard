@@ -9,7 +9,7 @@
 
 #define SPLIT_TAB(x) split(x,'\t')
 
-#define TEST_MODE
+//#define TEST_MODE
 
 //***************** Begin operation parameters *********************************
 #ifdef TEST_MODE
@@ -26,10 +26,10 @@
   ulong _nextTempChangeCheckTime;
   #define CHECK_TEMP_CHANGE _nextTempChangeCheckTime < millis()
   #define SET_NEXT_TEMP_CHANGE_TIME _nextTempChangeCheckTime = millis() + TEMP_CHANGE_PERIOD
-  float _currentTemp = 5;
+  float _currentTemp = -5;
   float _tempChangeIntervall = TEMP_CHANGE_INTERVALL;
   #define MIN_TEST_TEMP -10
-  #define MAX_TEST_TEMP 10
+  #define MAX_TEST_TEMP -3
 #else
   #define MQTT_DEBUG false
   #define TEMP_CHECK_PERIODE 6 * 60 * 1000 // 6 Min
@@ -150,8 +150,6 @@ void onConnectionEstablished() {
 #endif
 
   logger.printMessage("Current UTC time: %s\n",DateTime.toISOString().c_str());
-  // Start the DS18B20 sensor
-  sensors.begin();
 
   // LED red off and LED green on
   digitalWrite (LED_RED_PIN, LOW);	
@@ -160,24 +158,28 @@ void onConnectionEstablished() {
 
 
 void PublishRelaisStatus(bool relaisStat){
-  string topic = "Switch/Pump/Groundwater/";
-  topic += MY_NAME;
-  string payload = "";
-  if(relaisStat == ON){
-    payload += "ON";
-  }else{
-    payload += "OFF";
-  }
+  if(mqttClient.isConnected()){
+    string topic = "Switch/Pump/Groundwater/";
+    topic += MY_NAME;
+    string payload = "";
+    if(relaisStat == ON){
+      payload += "ON";
+    }else{
+      payload += "OFF";
+    }
 
-  mqttClient.publish(topic.c_str(),payload.c_str(), true);
+    mqttClient.publish(topic.c_str(),payload.c_str(), true);
+  }
 }
 
 void PublishTemperatur(float temperatureC){
-  char buff[80];
-  snprintf(buff, 80, "%s\t%f", FormatTime(DateTime.getTime()),temperatureC);
-  string topic = "Temperature/";
-  topic += MY_NAME;
-  mqttClient.publish(topic.c_str(), buff);
+  if(mqttClient.isConnected()){
+    char buff[80];
+    snprintf(buff, 80, "%s\t%f", FormatTime(DateTime.getTime()),temperatureC);
+    string topic = "Temperature/";
+    topic += MY_NAME;
+    mqttClient.publish(topic.c_str(), buff);
+  }
 }
 //***************** End MQTT *********************************
 
@@ -200,33 +202,37 @@ void setupInfluxDb(){
 }
 
 void WriteTemperature2Database(float temperature){
+    if(mqttClient.isConnected()){
       // Define data point with a measurement
-    Point pointDevice(INFLUXDB_TEMPERATUR_MEASUREMENT_NAME);
-    // Set tags
-    pointDevice.addTag("device_id", "aa46cde4-67a7-460a-afc5-a5541930555a");
-    pointDevice.addTag("location", "Pumpenhaus");
-    pointDevice.addTag("region", "Am Pothorn");
-    pointDevice.addTag("sensor_type", "Temperature");
-    pointDevice.addTag("valid", "T");
-    // set the temperature
-    pointDevice.addField("value", temperature);
-    // Write data
-    client.writePoint(pointDevice);
+      Point pointDevice(INFLUXDB_TEMPERATUR_MEASUREMENT_NAME);
+      // Set tags
+      pointDevice.addTag("device_id", "aa46cde4-67a7-460a-afc5-a5541930555a");
+      pointDevice.addTag("location", "Pumpenhaus");
+      pointDevice.addTag("region", "Am Pothorn");
+      pointDevice.addTag("sensor_type", "Temperature");
+      pointDevice.addTag("valid", "T");
+      // set the temperature
+      pointDevice.addField("value", temperature);
+      // Write data
+      client.writePoint(pointDevice);
+    }
 }
 
 
 void WritePumpSwitchStatus2Database(bool status){
+    if(mqttClient.isConnected()){
       // Define data point with a measurement
-    Point pointDevice(INFLUXDB_PUMP_SWITCH_MEASUREMENT_NAME);
-    // Set tags
-    pointDevice.addTag("device_id", "aa46cde4-67a7-460a-afc5-a5541930555a");
-    pointDevice.addTag("location", "Pumpenhaus");
-    pointDevice.addTag("region", "Am Pothorn");
-    pointDevice.addTag("switch", "GroundwaterPump");
-    // set the switch status
-    pointDevice.addField("value", (status == true?1:0));
-    // Write data
-    client.writePoint(pointDevice);
+      Point pointDevice(INFLUXDB_PUMP_SWITCH_MEASUREMENT_NAME);
+      // Set tags
+      pointDevice.addTag("device_id", "aa46cde4-67a7-460a-afc5-a5541930555a");
+      pointDevice.addTag("location", "Pumpenhaus");
+      pointDevice.addTag("region", "Am Pothorn");
+      pointDevice.addTag("switch", "GroundwaterPump");
+      // set the switch status
+      pointDevice.addField("value", (status == true?1:0));
+      // Write data
+      client.writePoint(pointDevice);
+    }
 }
 //***************** End InfluxDB *********************************
 
@@ -246,6 +252,9 @@ void setup() {
 
   mqttClient.enableDebuggingMessages(MQTT_DEBUG); // Enable/disable debugging messages sent to serial output
   mqttClient.enableHTTPWebUpdater(); // Enable the web updater. User and password default to values of MQTTUsername and MQTTPassword. These can be overrited with enableHTTPWebUpdater("user", "password").
+
+  // Start the DS18B20 sensor
+  sensors.begin();
 
   setupInfluxDb();
   pinMode(relaisPin, OUTPUT);
@@ -267,9 +276,7 @@ ulong _nextPumpSwitchTime;
 #define SET_NEXT_PUMP_OFF_TIME _nextPumpSwitchTime = millis() + _currentOnPeriode
 
 void loop() {
-
-  if(mqttClient.isConnected()){
-#ifdef TEST_MODE    
+  #ifdef TEST_MODE    
     if(CHECK_TEMP_CHANGE){
       _currentTemp += _tempChangeIntervall;
       if(_currentTemp >= MAX_TEST_TEMP || _currentTemp <= MIN_TEST_TEMP){
@@ -277,59 +284,60 @@ void loop() {
       }
       SET_NEXT_TEMP_CHANGE_TIME;
     }
-#endif
-    if(CHECK_TEMP){
-      // Read the temperature in ºC
-      float temperatureC = getTemperature();
+  #endif
 
-      logger.printMessage("Temperature: %2.1f ºC", temperatureC);
-      // Publish to the MQTT
-      PublishTemperatur(temperatureC);
-      // Write into the InfluxDB
-      WriteTemperature2Database(temperatureC);
+  if(CHECK_TEMP){
+    // Read the temperature in ºC
+    float temperatureC = getTemperature();
 
-      ulong nextOffPeriode = _currentOffPeriode;
-      // Set the pump off periode
-      if(temperatureC <= -10){
-        if(_currentOffPeriode != _pumpOffPeriode15M) nextOffPeriode = _pumpOffPeriode15M;
-      }else if(temperatureC <= -5){
-        if(_currentOffPeriode != _pumpOffPeriode25M) nextOffPeriode = _pumpOffPeriode25M;
-      }else if(temperatureC <= 3){
-        if(_currentOffPeriode != _pumpOffPeriode55M) nextOffPeriode = _pumpOffPeriode55M;
-      }else if(temperatureC > 3){
-        if(_currentOffPeriode != _pumpOffPeriode24H) nextOffPeriode = _pumpOffPeriode24H;
+    logger.printMessage("Temperature: %2.1f ºC", temperatureC);
+    // Publish to the MQTT
+    PublishTemperatur(temperatureC);
+    // Write into the InfluxDB
+    WriteTemperature2Database(temperatureC);
+
+    ulong nextOffPeriode = _currentOffPeriode;
+    // Set the pump off periode
+    if(temperatureC <= -10){
+      if(_currentOffPeriode != _pumpOffPeriode15M) nextOffPeriode = _pumpOffPeriode15M;
+    }else if(temperatureC <= -5){
+      if(_currentOffPeriode != _pumpOffPeriode25M) nextOffPeriode = _pumpOffPeriode25M;
+    }else if(temperatureC <= 3){
+      if(_currentOffPeriode != _pumpOffPeriode55M) nextOffPeriode = _pumpOffPeriode55M;
+    }else if(temperatureC > 3){
+      if(_currentOffPeriode != _pumpOffPeriode24H) nextOffPeriode = _pumpOffPeriode24H;
+    }
+
+    if(_currentOffPeriode != nextOffPeriode){
+      _currentOffPeriode = nextOffPeriode;
+      if(relaisStat == OFF){
+        SET_NEXT_PUMP_ON_TIME;
+      }
+    }
+
+    // Check if the pump switch time is reached
+    if(REACH_NEXT_PUMP_SWITCH_TIME){
+      if(relaisStat == OFF){
+        relaisStat = ON;
+        SET_NEXT_PUMP_OFF_TIME;
+      }else{
+        relaisStat = OFF;
+        SET_NEXT_PUMP_ON_TIME;
       }
 
-      if(_currentOffPeriode != nextOffPeriode){
-        _currentOffPeriode = nextOffPeriode;
-        if(relaisStat == OFF){
-          SET_NEXT_PUMP_ON_TIME;
-        }
-      }
+      digitalWrite(relaisPin, relaisStat);
 
-      // Check if the pump switch time is reached
-      if(REACH_NEXT_PUMP_SWITCH_TIME){
-        if(relaisStat == OFF){
-          relaisStat = ON;
-          SET_NEXT_PUMP_OFF_TIME;
-        }else{
-          relaisStat = OFF;
-          SET_NEXT_PUMP_ON_TIME;
-        }
-
-        digitalWrite(relaisPin, relaisStat);
-
-        PublishRelaisStatus(relaisStat);
-        WritePumpSwitchStatus2Database(relaisStat);
-      }
+      PublishRelaisStatus(relaisStat);
+      WritePumpSwitchStatus2Database(relaisStat);
+    }
 
 #ifdef TEST_MODE
       Serial.printf("Temp: %f\tPump Switch: %s\tCurrent Off Period: %i\tNext Pump Switch offset: %i in sec.\r\n", temperatureC, (relaisStat==OFF?"OFF":"ON"), _currentOffPeriode/1000, (_nextPumpSwitchTime -millis())/1000);
 #endif      
-      SET_NEXT_TEMP_CHECK_TIME;
-    }
+    SET_NEXT_TEMP_CHECK_TIME;
   }
-  else{
+
+  if(mqttClient.isConnected() == false){
     if(mqttClient.isWifiConnected() == false){
       Serial.println("Wifi not connected...");
     }else if(mqttClient.isMqttConnected() == false){
