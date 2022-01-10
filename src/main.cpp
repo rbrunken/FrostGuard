@@ -126,7 +126,7 @@ void setTemperatureHandler(const String &message){
 #endif
 
 EspMQTTClient mqttClient(
-  "PothornFunkOben", // WLAN SID
+  "PothornFunkOben_EXT", // WLAN SID
   "Sguea@rbr", // WLAN PW
   "192.168.2.20",   // MQTT Broker server ip on OpenHab PI
   "",             // Can be omitted if not needed
