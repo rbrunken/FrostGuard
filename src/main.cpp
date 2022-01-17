@@ -7,6 +7,12 @@
 #include <DallasTemperature.h>
 #include <InfluxDbClient.h>
 
+// used functions
+void WriteConnectionEstablished2Database(bool status);
+
+boolean relaisStat;   // Actual state of the relay. 1 := On ; 0 := Off
+
+
 #define SPLIT_TAB(x) split(x,'\t')
 
 //#define TEST_MODE
@@ -154,6 +160,9 @@ void onConnectionEstablished() {
   // LED red off and LED green on
   digitalWrite (LED_RED_PIN, LOW);	
   digitalWrite (LED_GREEN_PIN, HIGH);	
+  
+  // Write the connection established count into the influx DB
+  WriteConnectionEstablished2Database(relaisStat);
 }
 
 
@@ -228,6 +237,25 @@ void WritePumpSwitchStatus2Database(bool status){
       pointDevice.addTag("location", "Pumpenhaus");
       pointDevice.addTag("region", "Am Pothorn");
       pointDevice.addTag("switch", "GroundwaterPump");
+      pointDevice.addField("ConnectionEstablishedCount", mqttClient.getConnectionEstablishedCount());
+      // set the switch status
+      pointDevice.addField("value", (status == true?1:0));
+      // Write data
+      client.writePoint(pointDevice);
+    }
+}
+
+void WriteConnectionEstablished2Database(bool status){
+    if(mqttClient.isConnected()){
+      // Define data point with a measurement
+      Point pointDevice(INFLUXDB_PUMP_SWITCH_MEASUREMENT_NAME);
+      // Set tags
+      pointDevice.addTag("device_id", "aa46cde4-67a7-460a-afc5-a5541930555a");
+      pointDevice.addTag("location", "Pumpenhaus");
+      pointDevice.addTag("region", "Am Pothorn");
+      pointDevice.addTag("switch", "GroundwaterPump");
+      // set the switch status
+      pointDevice.addField("ConnectionEstablishedCount", mqttClient.getConnectionEstablishedCount());
       // set the switch status
       pointDevice.addField("value", (status == true?1:0));
       // Write data
@@ -235,8 +263,6 @@ void WritePumpSwitchStatus2Database(bool status){
     }
 }
 //***************** End InfluxDB *********************************
-
-boolean relaisStat;   // Actual state of the relay. 1 := On ; 0 := Off
 
 void setup() {
   // LED PINs as output

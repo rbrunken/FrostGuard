@@ -1,6 +1,7 @@
 {
     "files.associations": {
         "esp32-hal.h": "c",
-        "sstream": "cpp"
+        "sstream": "cpp",
+        "functional": "cpp"
     }
 }
