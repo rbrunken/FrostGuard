@@ -6,6 +6,9 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <InfluxDbClient.h>
+#include <Bounce2.h>
+
+#define TEST_BUTTON
 
 // used functions
 void WriteConnectionEstablished2Database(bool status);
@@ -15,7 +18,7 @@ boolean relaisStat;   // Actual state of the relay. 1 := On ; 0 := Off
 
 #define SPLIT_TAB(x) split(x,'\t')
 
-//#define TEST_MODE
+#define TEST_MODE
 
 //***************** Begin operation parameters *********************************
 #ifdef TEST_MODE
@@ -49,6 +52,9 @@ boolean relaisStat;   // Actual state of the relay. 1 := On ; 0 := Off
 // Define the ports of the LED´s
 #define LED_RED_PIN 32
 #define LED_GREEN_PIN 33
+
+// Define the buttons
+#define BUTTON_COUNTERFLUSH 16 
 
 ulong _tempCheckPeriode = TEMP_CHECK_PERIODE;
 
@@ -264,6 +270,10 @@ void WriteConnectionEstablished2Database(bool status){
 }
 //***************** End InfluxDB *********************************
 
+//***************** Begin Bounce *********************************
+Bounce2::Button buttonCounterflush = Bounce2::Button(); // Instantiate a Bounce object
+//***************** End Bounce *********************************
+
 void setup() {
   // LED PINs as output
   pinMode(LED_GREEN_PIN, OUTPUT);
@@ -276,6 +286,7 @@ void setup() {
 
   logger.begin((char *)MY_NAME, &mqttClient);
 
+  #ifndef TEST_BUTTON
   mqttClient.enableDebuggingMessages(MQTT_DEBUG); // Enable/disable debugging messages sent to serial output
   mqttClient.enableHTTPWebUpdater(); // Enable the web updater. User and password default to values of MQTTUsername and MQTTPassword. These can be overrited with enableHTTPWebUpdater("user", "password").
 
@@ -286,6 +297,12 @@ void setup() {
   pinMode(relaisPin, OUTPUT);
   relaisStat = OFF;
   digitalWrite(relaisPin, relaisStat);
+  #endif
+
+  // Configure the buttons
+  buttonCounterflush.attach(BUTTON_COUNTERFLUSH, INPUT);
+  buttonCounterflush.interval(5);
+  buttonCounterflush.setPressedState(LOW);
 }
 
 ulong _nextTempCheckTime;
@@ -302,6 +319,14 @@ ulong _nextPumpSwitchTime;
 #define SET_NEXT_PUMP_OFF_TIME _nextPumpSwitchTime = millis() + _currentOnPeriode
 
 void loop() {
+  buttonCounterflush.update();
+  if( buttonCounterflush.pressed() ) {
+    Serial.println("Counterflush button is pressed!");
+  }else{
+        Serial.println("Counterflush button is not pressed!");
+  }
+
+  #ifndef TEST_BUTTON    
   #ifdef TEST_MODE    
     if(CHECK_TEMP_CHANGE){
       _currentTemp += _tempChangeIntervall;
@@ -382,6 +407,6 @@ void loop() {
     digitalWrite (LED_RED_PIN, LOW);	
     digitalWrite (LED_GREEN_PIN, HIGH);	
   }
-
+  #endif //TEST_BUTTON
   delay(1000);
 }
